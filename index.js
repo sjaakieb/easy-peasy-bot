@@ -337,6 +337,8 @@ controller.hears(['help'], ['direct_message'], function (bot, message) {
 controller.hears(['going out to (.*) at ([0-9]{1,2}:[0-9]{2})'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
     var time = message.match[2];
+    var hour = parseInt(time.split(":")[0]);
+    var minutes = parseInt(time.split(":")[1]);
 
     if (shopName) {
         request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
@@ -349,6 +351,18 @@ controller.hears(['going out to (.*) at ([0-9]{1,2}:[0-9]{2})'], ['direct_messag
             }
 
             shopsGoingOut[shopKey].push(data.user.name);
+
+            var reminder = moment().hour(hour).minutes(minutes).seconds(0);
+
+            var j = schedule.scheduleJob(reminder.toDate(), function () {
+
+
+                var whoIsGoingOut = shopsGoingOut[shopKey].map(function (userName) {
+                    return `<@${userName}>`;
+                }).join(", ");
+
+                bot.say({ text: `Time to go to ${shopName} with ${whoIsGoingOut}`, channel: message.channel });
+            });
 
             bot.reply(message, `OK <@${data.user.name}>, you are going out to ${shopName} at ${time}`);
         });
