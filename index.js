@@ -90,8 +90,8 @@ controller.on('bot_channel_join', function (bot, message) {
     bot.reply(message, "I'm here!")
 });
 
-var goingOut = [];
 var shopsGoingOut = [];
+var shoppingList = [];
 
 var shops = [
     { name: "Subway", url: "https://www.thuisbezorgd.nl/en/subway-rotterdam-oude-binnenweg", menu: ["Chicken Teriyaki € 7,30", "Italian B.M.T® € 7,10", "Chicken Teriyaki € 7,00", "Veggie Patty € 9,80", "Subway Melt™ € 9,80", "Steak & Cheese € 9,80", "Chicken Fajita € 9,80", "Chicken Teriyaki € 9,80", "Gegrilde Kipfilet € 9,60"] },
@@ -362,6 +362,15 @@ controller.hears(['going out to (.*) at ([0-9]{1,2}:[0-9]{2})'], ['direct_messag
                 }).join(", ");
 
                 bot.say({ text: `Time to go to ${shopName} with ${whoIsGoingOut}`, channel: message.channel });
+
+                var shoppingText = shoppingList[shopKey].map(function (request) {
+                    return `${request.items} for <@${request.user.name}>`;
+                }).join("\n");
+
+                if (shoppingText){
+                    bot.say({ text: `Don't forget to bring :\n  ${shoppingText}`, channel: message.channel });
+                }
+
             });
 
             bot.reply(message, `OK <@${data.user.name}>, you are going out to ${shopName} at ${time}`);
@@ -429,7 +438,36 @@ controller.hears(['ask (.*) for (.*)'], ['direct_message'], function (bot, messa
     var askUserId = message.match[1].substr(2).slice(0, -1);
     var text = message.match[2];
 
-    bot.reply(message, `Ok, I'll remind <@${askUserId}> to bring ${text} for you`);
+
+    request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: askUserId } }, function (error, response, body) {
+        var dataAsk = JSON.parse(body);
+
+        request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
+            var dataUser = JSON.parse(body);
+
+            var userName = dataUser.user.name;
+            var askUserName = dataAsk.user.name;
+
+            for (var shopKey in shopsGoingOut) {
+
+                if (shopsGoingOut[shopKey].includes(askUserName)) {
+                    if (!shoppingList[shopKey]){
+                        shoppingList[shopKey]=[];
+                    }
+                    shoppingList[shopKey].push({user:dataUser.user,items:text});
+
+                    bot.reply(message, `Ok, I'll remind <@${askUserId}> to bring ${text} for you from ${shopKey}`);
+
+                    break;
+
+                }
+            }
+
+        });
+
+    });
+
+
 
 });
 
