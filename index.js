@@ -90,16 +90,8 @@ controller.on('bot_channel_join', function (bot, message) {
     bot.reply(message, "I'm here!")
 });
 
-controller.hears(['hello'], ['ambient', 'direct_message', 'direct_mention'], function (bot, message) {
-    bot.reply(message, 'Hello!');
-
-    bot.say({ text: 'Screw You !', channel: message.user }, function (response, error) {
-        console.log("Response", response);
-        console.error(error);
-    });
-
-});
-
+var goingOut = [];
+var shopsGoingOut = [];
 
 var shops = [
     { name: "Subway", url: "https://www.thuisbezorgd.nl/en/subway-rotterdam-oude-binnenweg", menu: ["Chicken Teriyaki € 7,30", "Italian B.M.T® € 7,10", "Chicken Teriyaki € 7,00", "Veggie Patty € 9,80", "Subway Melt™ € 9,80", "Steak & Cheese € 9,80", "Chicken Fajita € 9,80", "Chicken Teriyaki € 9,80", "Gegrilde Kipfilet € 9,60"] },
@@ -230,7 +222,6 @@ function startOrder(bot, message, shopName, time, items) {
     var minutes = parseInt(time.split(":")[1]);
     var shop = shops.find(function (a) { return a.name.toLowerCase() === shopName.toLowerCase() });
     if (shop) {
-        var token = (process.env.TOKEN) ? process.env.TOKEN : process.env.SLACK_TOKEN;
         request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
             var data = JSON.parse(body);
 
@@ -289,7 +280,6 @@ controller.hears(['order from (.*): (.*)'], ['direct_message'], function (bot, m
         return order.shop.toLowerCase() == shopName.toLowerCase();
     });
     if (order) {
-        var token = (process.env.TOKEN) ? process.env.TOKEN : process.env.SLACK_TOKEN;
         request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
             var data = JSON.parse(body);
             items.forEach(function (item) {
@@ -344,19 +334,104 @@ controller.hears(['help'], ['direct_message'], function (bot, message) {
 });
 
 
+controller.hears(['going out to (.*) at ([0-9]{1,2}:[0-9]{2})'], ['direct_message'], function (bot, message) {
+    var shopName = message.match[1];
+    var time = message.match[2];
+
+    if (shopName) {
+        request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
+            var data = JSON.parse(body);
+
+            var shopKey = shopName + ' at ' + time;
+
+            if (!shopsGoingOut[shopKey]) {
+                shopsGoingOut[shopKey] = [];
+            }
+
+            shopsGoingOut[shopKey].push(data.user.name);
+
+            bot.reply(message, `OK <@${data.user.name}>, you are going out to ${shopName} at ${time}`);
+        });
+    }
+});
+
+controller.hears(['who is going out'], ['direct_message'], function (bot, message) {
+
+    var whoIsGoingOut = ``;
+
+    for (var shopKey in shopsGoingOut) {
+
+        whoIsGoingOut += `${shopKey} -> `;
+
+        shopsGoingOut[shopKey].forEach(function (userName) {
+            whoIsGoingOut += `<@${userName}> `;
+        });
+
+        whoIsGoingOut += `\n`;
+
+    }
+
+    bot.reply(message, whoIsGoingOut);
+});
+
+controller.hears(['join (.*)'], ['direct_message'], function (bot, message) {
+
+    var joinUserId = message.match[1].substr(2).slice(0, -1);
+
+    request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: joinUserId } }, function (error, response, body) {
+        var dataJoin = JSON.parse(body);
+
+        request.post({ url: "https://slack.com/api/users.info", form: { token: token, user: message.user } }, function (error, response, body) {
+            var dataUser = JSON.parse(body);
+
+            var userName = dataUser.user.name;
+            var joinUserName = dataJoin.user.name;
+
+            for (var shopKey in shopsGoingOut) {
+
+                if (shopsGoingOut[shopKey].includes(joinUserName)) {
+
+                    var members = shopsGoingOut[shopKey].map(function (member) {
+                        return `<@${member}>`;
+                    });
+
+                    shopsGoingOut[shopKey].push(userName);
+
+                    bot.reply(message, `Ok, you joined ${members} on ${shopKey}`);
+
+                    break;
+
+                }
+            }
+
+        });
+
+    });
+
+});
+
+controller.hears(['ask (.*) for (.*)'], ['direct_message'], function (bot, message) {
+
+    var askUserId = message.match[1].substr(2).slice(0, -1);
+    var text = message.match[2];
+
+    bot.reply(message, `Ok, I'll remind <@${askUserId}> to bring ${text} for you`);
+
+});
+
 /**
  * AN example of what could be:
  * Any un-handled direct mention gets a reaction and a pat response!
  */
-//controller.on('direct_message,mention,direct_mention', function (bot, message) {
-//    bot.api.reactions.add({
-//        timestamp: message.ts,
-//        channel: message.channel,
-//        name: 'robot_face',
-//    }, function (err) {
-//        if (err) {
-//            console.log(err)
-//        }
-//        bot.reply(message, 'I heard you loud and clear boss.');
-//    });
-//});
+controller.on('direct_message,mention,direct_mention', function (bot, message) {
+    bot.api.reactions.add({
+        timestamp: message.ts,
+        channel: message.channel,
+        name: 'robot_face',
+    }, function (err) {
+        if (err) {
+            console.log(err);
+        }
+        bot.reply(message, 'Command not supported. Please type "help"');
+    });
+});
