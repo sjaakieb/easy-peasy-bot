@@ -29,6 +29,8 @@
     "botkit-storage-mongo": "^1.0.2",
     "mongodb": "^1.4.39",
     "request": "^2.81.0",
-    "cheerio": "^0.22.0"
+    "cheerio": "^0.22.0",
+    "node-schedule": "^1.2.1",
+    "moment":"^2.18.1"
   }
 }

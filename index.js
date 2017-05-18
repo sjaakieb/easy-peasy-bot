@@ -1,5 +1,7 @@
 var request = require('request');
 var cheerio = require('cheerio');
+var schedule = require('node-schedule');
+var moment = require('moment');
 
 /**
  * A Bot for Slack!
@@ -88,8 +90,14 @@ controller.on('bot_channel_join', function (bot, message) {
     bot.reply(message, "I'm here!")
 });
 
-controller.hears('hello', ['ambient', 'direct_message', 'direct_mention'], function (bot, message) {
+controller.hears(['hello'], ['ambient', 'direct_message', 'direct_mention'], function (bot, message) {
     bot.reply(message, 'Hello!');
+
+    bot.say({ text: 'Screw You !', channel: message.user }, function (response, error) {
+        console.log("Response", response);
+        console.error(error);
+    });
+
 });
 
 
@@ -169,7 +177,7 @@ controller.hears('open shops', ['direct_message'], function (bot, message) {
     bot.reply(message, restaurantNames.join("\n"));
 });
 
-controller.hears('menu from (.*)', ['direct_message'], function (bot, message) {
+controller.hears(['menu from (.*)'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
     var shop = shops.find(function (a) { return a.name.toLowerCase() === shopName.toLowerCase() });
     if (shop) {
@@ -179,7 +187,7 @@ controller.hears('menu from (.*)', ['direct_message'], function (bot, message) {
     }
 });
 
-controller.hears('webpage (.*)', ['direct_message'], function (bot, message) {
+controller.hears(['webpage (.*)'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
     var shop = shops.find(function (a) { return a.name.toLowerCase() === shopName.toLowerCase() });
     if (shop) {
@@ -189,20 +197,11 @@ controller.hears('webpage (.*)', ['direct_message'], function (bot, message) {
     }
 });
 
-controller.hears('webpage (.*)', ['direct_message'], function (bot, message) {
+controller.hears(['order from (.*) at ([0-9]{1,2}:[0-9]{2})'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
-    var shop = shops.find(function (a) { return a.name.toLowerCase() === shopName.toLowerCase() });
-    if (shop) {
-        bot.reply(message, shop.url);
-    } else {
-        bot.reply(message, "Shop not found");
-    }
-});
-
-
-controller.hears('order from (.*) at ([0-9]{1,2}:[0-9]{2})', ['direct_message'], function (bot, message) {
-    var shopName = message.match[1];
-    var time = message.match[2];
+    var time = message.match[2].split(":");
+    var hour = parseInt(time[0]);
+    var minutes = parseInt(time[1]);
     var shop = shops.find(function (a) { return a.name.toLowerCase() === shopName.toLowerCase() });
     if (shop) {
         var token = (process.env.TOKEN) ? process.env.TOKEN : process.env.SLACK_TOKEN;
@@ -214,7 +213,21 @@ controller.hears('order from (.*) at ([0-9]{1,2}:[0-9]{2})', ['direct_message'],
                 time: time,
                 items: {}
             })
-            bot.reply(message, `<@${data.user.name}> will order at ${shopName} at ${time}`);
+
+            var reminder = moment().hour(hour).minutes(minutes).seconds(0);
+            // var reminder = moment().add(10,"seconds");
+            var j = schedule.scheduleJob(reminder.toDate(), function () {
+                var order = orders.find(function (a) { return a.shop.toLowerCase() === shopName.toLowerCase() });
+
+                var itemText = Object.keys(order.items).map(function (item) {
+                    var users = order.items[item].join(",");
+                    return `${item} by ${users}`
+                });
+                if (order) {
+                    bot.say({ text: `Final order for ${shopName} \n ${itemText.join("\n")}`, channel: message.channel });
+                }
+            });
+            bot.reply(message, `<@${data.user.name}> will order at ${shopName} at ${message.match[2]}`);
         });
     } else {
         bot.reply(message, "Shop not found");
@@ -222,7 +235,7 @@ controller.hears('order from (.*) at ([0-9]{1,2}:[0-9]{2})', ['direct_message'],
 });
 
 
-controller.hears('order from (.*): ([^,]+(,{\s}*[^,]+)*)', ['direct_message'], function (bot, message) {
+controller.hears(['order from (.*): ([^,]+(,{\s}*[^,]+)*)'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
     var items = message.match[2].split(",");
     var order = orders.find(function (order) {
@@ -246,19 +259,19 @@ controller.hears('order from (.*): ([^,]+(,{\s}*[^,]+)*)', ['direct_message'], f
     }
 });
 
-controller.hears('who is ordering', ['direct_message'], function (bot, message) {
+controller.hears(['who is ordering'], ['direct_message'], function (bot, message) {
     var ordersText = orders.map(function (order) { return `<@${order.user.name}> is ordering from ${order.shop} at ${order.time}` });
     bot.reply(message, ordersText.join("\n"));
 });
 
 
-controller.hears('what is being ordered from (.*)', ['direct_message'], function (bot, message) {
+controller.hears(['what is being ordered from (.*)'], ['direct_message'], function (bot, message) {
     var shopName = message.match[1];
     var order = orders.find(function (order) {
         return order.shop.toLowerCase() == shopName.toLowerCase();
     });
     if (order) {
-        var itemText = Object.keys(order.items).map(function(item){
+        var itemText = Object.keys(order.items).map(function (item) {
             var users = order.items[item].join(",");
             return `${item} by ${users}`
         });
@@ -268,7 +281,7 @@ controller.hears('what is being ordered from (.*)', ['direct_message'], function
     }
 });
 
-controller.hears('help', ['direct_message'], function (bot, message) {
+controller.hears(['help'], ['direct_message'], function (bot, message) {
     bot.reply(message, helpText);
 });
 /**
